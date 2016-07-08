@@ -6,6 +6,7 @@ import android.content.ContentProviderOperation;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.OperationApplicationException;
 import android.database.Cursor;
 import android.net.Uri;
@@ -22,6 +23,8 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
 import android.widget.ListView;
@@ -43,8 +46,6 @@ public class MainActivity extends AppCompatActivity {
     FloatingActionButton fab;
 
     //TODO: Proper nomenclature and cleaning required
-    ArrayList<String> listItems = new ArrayList<>();
-    ArrayList<String> dupesRemoved = listItems;
     ArrayList<String> allContacts = new ArrayList<>();
     ArrayList<String> onlyDuplicates = new ArrayList<>();
     ArrayAdapter<String> adapter = null;
@@ -68,13 +69,20 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initializeViews();
-
         phoneContacts = new ArrayList<>(); //Contains all contacts
         contactDuplicates = new ArrayList<>();
 
         //Reads all the contacts and stores them in phoneContacts Arraylist
         readPhoneContacts(MainActivity.this);
-        contactDuplicates = findDuplicates(phoneContacts); //Contains all duplicated entries
+        if (phoneContacts.size() > 1)
+            contactDuplicates = findDuplicates(phoneContacts); //Contains all duplicated entries
+
+        if(contactDuplicates.size() == 0){
+            fab.hide();
+        } else {
+            fab.show();
+
+        }
         //populates arraylists for simple listview adapter
         //TODO: use a custom adapter for better UX
         for (PhoneContact contact : phoneContacts) {
@@ -86,7 +94,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         //Delete Contacts button
-        fab.setOnClickListener(new View.OnClickListener() {
+        fab.setOnClickListener( new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 deleteDupes();
@@ -100,16 +108,14 @@ public class MainActivity extends AppCompatActivity {
         Allcontacts = false;
         mProgressDialog = new ProgressDialog(this);
         final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
-        adapter = new ArrayAdapter<String>(MainActivity.this, R.layout.row, onlyDuplicates);
+        adapter = new ArrayAdapter<>(MainActivity.this, R.layout.row, onlyDuplicates);
         listView.setAdapter(adapter);
         listView.setItemsCanFocus(false);
         listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
         adapter.notifyDataSetChanged();
         listView.invalidateViews();
         if (contactDuplicates.isEmpty() && Allcontacts == false) {
-            //listView.setVisibility(View.INVISIBLE);
             layout = (RelativeLayout) findViewById(R.id.rr);
-            // valueTV = new TextView(this);
             valueTV.setText("No Duplicates!");
             valueTV.setId('5');
             valueTV.setTextSize(TypedValue.COMPLEX_UNIT_SP, 60);
@@ -119,8 +125,10 @@ public class MainActivity extends AppCompatActivity {
                     RelativeLayout.LayoutParams.FILL_PARENT));
             valueTV.setGravity(Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL);
             layout.addView(valueTV);
+            fab.hide();
         } else if (!contactDuplicates.isEmpty() && Allcontacts == false) {
             k = 1;
+            fab.show();
             alertDialog.setTitle("Duplicates Found!");
             alertDialog.setButton("OK", new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface dialog, int which) {
@@ -139,6 +147,10 @@ public class MainActivity extends AppCompatActivity {
 
                 if (isChecked) {
                     Allcontacts = true;
+                    if(allContacts.isEmpty()){
+                        fab.hide();
+                    }
+                    else    fab.show();
                     adapter = new ArrayAdapter<String>(MainActivity.this, R.layout.row, allContacts);
                     listView.setAdapter(adapter);
                     adapter.notifyDataSetChanged();
@@ -147,13 +159,16 @@ public class MainActivity extends AppCompatActivity {
 
                 } else {
                     Allcontacts = false;
-                    if (dupesRemoved.isEmpty()) {
+
+                    if (onlyDuplicates.isEmpty()) {
+                        fab.hide();
                         valueTV.setVisibility(View.VISIBLE);
                         adapter = new ArrayAdapter<>(MainActivity.this, R.layout.row, onlyDuplicates);
                         listView.setAdapter(adapter);
                         adapter.notifyDataSetChanged();
                         listView.invalidateViews();
                     } else {
+                        fab.show();
                         valueTV.setVisibility(View.INVISIBLE);
                         adapter = new ArrayAdapter<>(MainActivity.this, R.layout.row, onlyDuplicates);
                         listView.setAdapter(adapter);
@@ -263,6 +278,7 @@ public class MainActivity extends AppCompatActivity {
 
         int start = 0;
         if(!duplicatesOrganised.isEmpty() &&
+                duplicatesOrganised.size() > 1 &&
                 !duplicatesOrganised.get(0).getContactNumber().equals(duplicatesOrganised.get(1).getContactNumber()) ){
             start = 1;
         }
@@ -313,7 +329,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    public void emptyRemover(String s, String name) {
+    public void emptyRemover(String s) {
         ContentResolver contentResolver = this.getContentResolver();
         Cursor cursor = contentResolver.query(ContactsContract.Contacts.CONTENT_URI, null, null, null, null);
         while (cursor.moveToNext()&&!cursor.isClosed()) {
@@ -384,7 +400,7 @@ public class MainActivity extends AppCompatActivity {
                     if (checkedItemPositions.get(i)) {
                         String id = phoneContacts.get(i).getContactID();
                         updateContact(id, phoneContacts.get(i).getContactNumberID());
-                        emptyRemover(id,phoneContacts.get(i).getContactName());
+                        emptyRemover(id);
                         publishProgress((int) (t * 100 / itemCount));
                     }
                     d1 = 1;
@@ -394,7 +410,7 @@ public class MainActivity extends AppCompatActivity {
                     if (checkedItemPositions.get(i)) {
                         String id = contactDuplicates.get(i).getContactID();
                         updateContact(id, contactDuplicates.get(i).getContactNumberID());
-                        emptyRemover(id,contactDuplicates.get(i).getContactName());
+                        emptyRemover(id);
                         publishProgress((int) (t * 100 / itemCount));
                     }
                     d = 1;
@@ -489,27 +505,28 @@ public class MainActivity extends AppCompatActivity {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-        //noinspection SimplifiableIfStatement
-
-        //noinspection SimplifiableIfStatement
-
-        return super.onOptionsItemSelected(item);
+        switch (item.getItemId()) {
+            case R.id.action_about:
+                startActivity(new Intent(MainActivity.this, About.class));
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
     }
 
 
     @Override
     protected void onStart() {
 
-        //adapter.notifyDataSetChanged();
-        //listView.invalidateViews();
+        adapter.notifyDataSetChanged();
+        listView.invalidateViews();
         super.onStart();
     }
 
     @Override
     protected void onRestart() {
-        //adapter.notifyDataSetChanged();
-        //listView.invalidateViews();
+        adapter.notifyDataSetChanged();
+        listView.invalidateViews();
         super.onRestart();
 
     }
@@ -517,16 +534,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
 
-        // adapter.notifyDataSetChanged();
-        //listView.invalidateViews();
+         adapter.notifyDataSetChanged();
+         listView.invalidateViews();
         super.onPause();
     }
 
 
     @Override
     protected void onPostResume() {
-        // adapter.notifyDataSetChanged();
-        //listView.invalidateViews();
+         adapter.notifyDataSetChanged();
+         listView.invalidateViews();
         super.onPostResume();
 
 
@@ -543,8 +560,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
 
-        //adapter.notifyDataSetChanged();
-        //listView.invalidateViews();
+        adapter.notifyDataSetChanged();
+        listView.invalidateViews();
         super.onResume();
     }
 }
